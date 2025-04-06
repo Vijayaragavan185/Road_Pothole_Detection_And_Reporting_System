@@ -1,9 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import sqlite3
 import numpy as np
 import openvino as ov
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -28,6 +29,35 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+# Add some test data
+def add_test_data():
+    conn = sqlite3.connect('potholes.db')
+    cursor = conn.cursor()
+    # Check if we already have data
+    cursor.execute("SELECT COUNT(*) FROM potholes")
+    count = cursor.fetchone()[0]
+    
+    if count == 0:
+        # Add some sample data
+        test_data = [
+            (20.5937, 78.9629, 0.85, datetime.now().isoformat()),  # Center of India
+            (20.6037, 78.9729, 0.65, datetime.now().isoformat()),  # Nearby
+            (20.5837, 78.9529, 0.95, datetime.now().isoformat()),  # Another nearby
+        ]
+        cursor.executemany(
+            "INSERT INTO potholes (latitude, longitude, severity, timestamp) VALUES (?, ?, ?, ?)",
+            test_data
+        )
+        conn.commit()
+        print("Added test pothole data")
+    
+    conn.close()
+
+# Root route to serve the HTML page
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 # API endpoint to receive pothole data from ESP32
 @app.route('/api/detect', methods=['POST'])
@@ -66,12 +96,9 @@ def get_potholes():
     return jsonify(potholes)
 
 def extract_features(data):
-    # Implement feature extraction based on your create_windows() function
-    features = []
-    
-    # Add your feature extraction code here similar to final.c
-    # This should match the 34 features from your SVM model
-    
+    # This is a placeholder - implement your actual feature extraction
+    # It should match the feature extraction in your ESP32 code (extract_features function)
+    features = np.zeros(34, dtype=np.float32)  # Assuming 34 features based on model
     return features
 
 def store_pothole(lat, lng, severity):
@@ -86,4 +113,5 @@ def store_pothole(lat, lng, severity):
 
 if __name__ == '__main__':
     init_db()
+    add_test_data()  # Add test data for demonstration
     app.run(debug=True, host='0.0.0.0', port=5000)
