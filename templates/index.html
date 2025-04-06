@@ -3,6 +3,9 @@
 <head>
     <title>Pothole Detection Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
     <style>
         body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
         #map { height: 80vh; width: 100%; }
@@ -20,17 +23,22 @@
             <h1>Road Pothole Detection System</h1>
         </div>
         
+<!-- Update in index.html -->
         <div class="pothole-info">
-            <h3>Pothole Information</h3>
-            <p>Total potholes detected: <span id="pothole-count">0</span></p>
-            <div>
-                <label for="start">Start:</label>
-                <input type="text" id="start" placeholder="Starting point">
-                <label for="destination">Destination:</label>
-                <input type="text" id="destination" placeholder="Destination">
+            <h3>Route Information</h3>
+            <p id="pothole-count">Potholes on route: 0</p>
+            <div class="route-search">
+                <input type="text" id="start" placeholder="Starting point (e.g., Tamilnadu)" list="suggestions-start">
+                <datalist id="suggestions-start"></datalist>
+                
+                <input type="text" id="destination" placeholder="Destination (e.g., Chengalpattu)" list="suggestions-end">
+                <datalist id="suggestions-end"></datalist>
+                
                 <button id="route-btn">Find Route</button>
             </div>
+            <div id="route-status"></div>
         </div>
+
         
         <div id="map"></div>
     </div>
