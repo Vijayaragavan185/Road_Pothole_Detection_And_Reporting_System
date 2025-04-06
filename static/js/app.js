@@ -62,12 +62,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Add markers for each pothole
                 data.forEach(pothole => {
                     const marker = L.circleMarker([pothole.lat, pothole.lng], {
-                        radius: 8,
+                        radius: 12,
                         fillColor: getSeverityColor(pothole.severity),
                         color: '#000',
-                        weight: 1,
+                        weight: 2,
                         opacity: 1,
-                        fillOpacity: 0.8
+                        fillOpacity: 0.9,
+                        zIndex: 1000
                     }).addTo(map);
                     
                     marker.bindPopup(`
@@ -399,6 +400,40 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Update pothole count display
             document.getElementById('pothole-count').textContent = `Potholes on route: ${data.pothole_count}`;
+            
+            // Clear existing pothole markers first
+            potholeMarkers.forEach(marker => map.removeLayer(marker));
+            potholeMarkers = [];
+
+            // Create markers for potholes along the route
+            if (data.potholes && data.potholes.length > 0) {
+                data.potholes.forEach(pothole => {
+                    const markerElement = L.DomUtil.create('div');
+                    markerElement.className = 'pothole-marker';
+                    
+                    const marker = L.circleMarker([pothole.lat, pothole.lng], {
+                        radius: 15, // Larger for better visibility
+                        fillColor: getSeverityColor(pothole.severity),
+                        color: '#000',
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.9,
+                        zIndex: 2000 // Higher than route and turn markers
+                    }).addTo(map);
+                    
+                    marker.bindPopup(`
+                        <strong>Pothole</strong><br>
+                        Severity: ${(pothole.severity * 10).toFixed(1)}/10<br>
+                        Detected: ${new Date(pothole.timestamp).toLocaleString()}
+                    `);
+                    
+                    potholeMarkers.push(marker);
+                });
+                
+                console.log(`Created ${potholeMarkers.length} pothole markers`);
+            } else {
+                console.log("No potholes found on this route");
+            }
             
             // Update status with formatted information
             statusEl.innerHTML = `
