@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pothole Detection Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { height: 80vh; width: 100%; }
+        .container { padding: 20px; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .pothole-info { background-color: #f8f8f8; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .pothole-severe { background-color: #ff0000; }
+        .pothole-moderate { background-color: #ff8800; }
+        .pothole-mild { background-color: #ffcc00; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Road Pothole Detection System</h1>
+        </div>
+        
+        <div class="pothole-info">
+            <h3>Pothole Information</h3>
+            <p>Total potholes detected: <span id="pothole-count">0</span></p>
+            <div>
+                <label for="start">Start:</label>
+                <input type="text" id="start" placeholder="Starting point">
+                <label for="destination">Destination:</label>
+                <input type="text" id="destination" placeholder="Destination">
+                <button id="route-btn">Find Route</button>
+            </div>
+        </div>
+        
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([20.5937, 78.9629], 5); // Default to India
+        
+        // Add tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // Load potholes data
+        async function loadPotholes() {
+            try {
+                const response = await fetch('/api/potholes');
+                const data = await response.json();
+                
+                // Update count
+                document.getElementById('pothole-count').textContent = data.length;
+                
+                // Add markers
+                data.forEach(pothole => {
+                    const severityClass = getSeverityClass(pothole.severity);
+                    const marker = L.circleMarker([pothole.lat, pothole.lng], {
+                        radius: 8,
+                        fillColor: severityClass,
+                        color: '#000',
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(map);
+                    
+                    marker.bindPopup(`
+                        <strong>Pothole</strong><br>
+                        Severity: ${(pothole.severity * 10).toFixed(1)}/10<br>
+                        Detected: ${new Date(pothole.timestamp).toLocaleString()}
+                    `);
+                });
+                
+                // Fit map to show all markers if there are any
+                if (data.length > 0) {
+                    const latlngs = data.map(p => [p.lat, p.lng]);
+                    map.fitBounds(L.latLngBounds(latlngs));
+                }
+            } catch (error) {
+                console.error('Error loading potholes:', error);
+            }
+        }
+        
+        // Get color based on severity
+        function getSeverityClass(severity) {
+            if (severity > 0.8) return '#ff0000';
+            if (severity > 0.6) return '#ff8800';
+            return '#ffcc00';
+        }
+        
+        // Route finding (simplified)
+        document.getElementById('route-btn').addEventListener('click', async function() {
+            const start = document.getElementById('start').value;
+            const destination = document.getElementById('destination').value;
+            
+            if (!start || !destination) {
+                alert('Please enter both starting point and destination');
+                return;
+            }
+            
+            // This would typically use a geocoding API
+            alert(`Finding route from ${start} to ${destination}`);
+            // In a real implementation, you would:
+            // 1. Geocode addresses to coordinates
+            // 2. Get a route from a routing service
+            // 3. Query your API for potholes along the route
+        });
+        
+        // Load potholes when page loads
+        loadPotholes();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadPotholes, 30000);
+    </script>
+</body>
+</html>
