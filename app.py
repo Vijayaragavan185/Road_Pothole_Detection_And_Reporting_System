@@ -94,19 +94,6 @@ def detect_pothole():
     })
 
 # API endpoint to get all potholes
-@app.route('/api/potholes', methods=['GET'])
-def get_potholes():
-    conn = sqlite3.connect('potholes.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT latitude, longitude, severity, timestamp FROM potholes")
-    potholes = [
-        {"lat": row[0], "lng": row[1], "severity": row[2], "timestamp": row[3]} 
-        for row in cursor.fetchall()
-    ]
-    conn.close()
-    return jsonify(potholes)
-
-# API endpoint to get route information
 @app.route('/api/route', methods=['GET'])
 def get_route_info():
     start_lat = float(request.args.get('start_lat'))
@@ -114,32 +101,35 @@ def get_route_info():
     end_lat = float(request.args.get('end_lat'))
     end_lng = float(request.args.get('end_lng'))
     
-    # Calculate route bounds with small buffer
-    min_lat = min(start_lat, end_lat) - 0.02
-    max_lat = max(start_lat, end_lat) + 0.02
-    min_lng = min(start_lng, end_lng) - 0.02
-    max_lng = max(start_lng, end_lng) + 0.02
-    
-    # Query potholes along route
+    # Query potholes within the route bounds
     conn = sqlite3.connect('potholes.db')
     cursor = conn.cursor()
     cursor.execute("""
         SELECT COUNT(*) FROM potholes 
         WHERE latitude BETWEEN ? AND ? 
         AND longitude BETWEEN ? AND ?
-    """, (min_lat, max_lat, min_lng, max_lng))
+    """, (start_lat, end_lat, start_lng, end_lng))
     pothole_count = cursor.fetchone()[0]
+    
+    # Get the potholes along the route for highlighting
+    cursor.execute("""
+        SELECT latitude, longitude, severity, timestamp FROM potholes 
+        WHERE latitude BETWEEN ? AND ? 
+        AND longitude BETWEEN ? AND ?
+    """, (start_lat, end_lat, start_lng, end_lng))
+    
+    potholes = [
+        {"lat": row[0], "lng": row[1], "severity": row[2], "timestamp": row[3]} 
+        for row in cursor.fetchall()
+    ]
+    
     conn.close()
     
-    # Calculate approximate distance
-    distance = calculate_distance(start_lat, start_lng, end_lat, end_lng)
-    
     return jsonify({
-        "start": {"lat": start_lat, "lng": start_lng},
-        "end": {"lat": end_lat, "lng": end_lng},
         "pothole_count": pothole_count,
-        "distance_km": round(distance, 2)
+        "potholes": potholes
     })
+
 
 def calculate_distance(lat1, lng1, lat2, lng2):
     # Haversine formula to calculate distance between coordinates

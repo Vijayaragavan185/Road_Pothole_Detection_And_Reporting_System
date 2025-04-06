@@ -3,44 +3,58 @@
 <head>
     <title>Pothole Detection Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <style>
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        #map { height: 80vh; width: 100%; }
-        .container { padding: 20px; }
-        .header { text-align: center; margin-bottom: 20px; }
-        .pothole-info { background-color: #f8f8f8; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
-        .pothole-severe { background-color: #ff0000; }
-        .pothole-moderate { background-color: #ff8800; }
-        .pothole-mild { background-color: #ffcc00; }
-        .route-search { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
-        .route-search input { flex: 1; min-width: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
-        .route-search button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        #route-status { margin-top: 10px; padding: 8px; background-color: #f1f1f1; border-radius: 4px; min-height: 20px; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
     <div class="container">
-        <div class="header">
+        <header>
             <h1>Road Pothole Detection System</h1>
+        </header>
+        
+        <div class="panels-container">
+            <div class="info-panel">
+                <h3>Route Information</h3>
+                <p id="pothole-count">Potholes on route: 0</p>
+                <div class="search-container">
+                    <div class="search-box">
+                        <input type="text" id="start" placeholder="Starting point (e.g., Tamilnadu)" />
+                        <div id="start-results" class="search-results"></div>
+                    </div>
+                    
+                    <div class="search-box">
+                        <input type="text" id="destination" placeholder="Destination (e.g., Chengalpattu)" />
+                        <div id="destination-results" class="search-results"></div>
+                    </div>
+                    
+                    <button id="route-btn">Find Route</button>
+                </div>
+                <div id="route-status"></div>
+            </div>
+            
+            <!-- New panel for turn-by-turn directions -->
+            <div class="info-panel directions-panel" id="directions-panel">
+                <h3>Turn-by-Turn Directions</h3>
+                <div id="directions-container">
+                    <p class="directions-placeholder">Enter a start and destination to get directions.</p>
+                </div>
+            </div>
         </div>
         
-        <div class="pothole-info">
-            <h3>Route Information</h3>
-            <p id="pothole-count">Potholes on route: 0</p>
-            <div class="route-search">
-                <input type="text" id="start" placeholder="Starting point (e.g., Tamilnadu)" list="suggestions-start">
-                <datalist id="suggestions-start"></datalist>
-                
-                <input type="text" id="destination" placeholder="Destination (e.g., Chengalpattu)" list="suggestions-end">
-                <datalist id="suggestions-end"></datalist>
-                
-                <button id="route-btn">Find Route</button>
-            </div>
-            <div id="route-status"></div>
-        </div>
-
         <div id="map"></div>
+        
+        <div class="legend">
+            <div class="legend-title">Pothole Severity</div>
+            <div class="legend-item">
+                <span class="dot severe"></span> Severe Pothole
+            </div>
+            <div class="legend-item">
+                <span class="dot moderate"></span> Moderate Pothole
+            </div>
+            <div class="legend-item">
+                <span class="dot mild"></span> Mild Pothole
+            </div>
+        </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
