@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Variables to store map data
     let potholeMarkers = [];
     let currentRoute = null;
-    let totalPotholes = 0;
     
     // Get user's location if available
     if (navigator.geolocation) {
@@ -46,8 +45,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 potholeMarkers.forEach(marker => map.removeLayer(marker));
                 potholeMarkers = [];
                 
-                totalPotholes = data.length;
-                document.getElementById('pothole-count').textContent = totalPotholes;
+                // Update count
+                document.getElementById('pothole-count').textContent = `Potholes on route: ${data.length}`;
                 
                 // Add markers for each pothole
                 data.forEach(pothole => {
@@ -63,7 +62,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     marker.bindPopup(`
                         <strong>Pothole</strong><br>
                         Severity: ${(pothole.severity * 10).toFixed(1)}/10<br>
-                        Location: ${pothole.lat.toFixed(6)}, ${pothole.lng.toFixed(6)}<br>
                         Detected: ${new Date(pothole.timestamp).toLocaleString()}
                     `);
                     
@@ -73,7 +71,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Fit map to show all markers if there are any
                 if (potholeMarkers.length > 0) {
                     const group = new L.featureGroup(potholeMarkers);
-                    map.fitBounds(group.getBounds(), { padding: [50, 50] });
+                    map.fitBounds(group.getBounds());
                 }
             })
             .catch(error => console.error('Error fetching potholes:', error));
@@ -138,18 +136,17 @@ document.addEventListener('DOMContentLoaded', function() {
             ], {color: 'blue', weight: 4}).addTo(map);
             
             // Fit map to route
-            map.fitBounds(currentRoute.getBounds(), { padding: [50, 50] });
+            map.fitBounds(currentRoute.getBounds());
             
             // Query for potholes along route
             const response = await fetch(`/api/route?start_lat=${startLoc.lat}&start_lng=${startLoc.lng}&end_lat=${destLoc.lat}&end_lng=${destLoc.lng}`);
             const data = await response.json();
             
             // Update pothole count display
-            document.getElementById('route-pothole-count').textContent = data.pothole_count;
-            document.getElementById('route-distance').textContent = data.distance_km.toFixed(2);
+            document.getElementById('pothole-count').textContent = `Potholes on route: ${data.pothole_count}`;
             
             // Update status
-            statusEl.innerHTML = `Route from ${startLoc.display_name.split(',')[0]} to ${destLoc.display_name.split(',')[0]} found`;
+            statusEl.innerHTML = `Route found from ${startLoc.display_name.split(',')[0]} to ${destLoc.display_name.split(',')[0]}. ${data.pothole_count} potholes detected along this ${data.distance_km.toFixed(1)} km route.`;
             
         } catch (error) {
             console.error('Error finding route:', error);
@@ -188,10 +185,4 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Set up periodic refresh of pothole data (every 30 seconds)
     setInterval(fetchPotholes, 30000);
-    
-    // Update map when it's moved or zoomed
-    map.on('moveend', function() {
-        // Only fetch new data if we've moved significantly
-        fetchPotholes();
-    });
 });

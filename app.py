@@ -4,7 +4,7 @@ import sqlite3
 import numpy as np
 import openvino as ov
 from datetime import datetime
-import os
+import math
 
 app = Flask(__name__)
 CORS(app)
@@ -39,11 +39,22 @@ def add_test_data():
     count = cursor.fetchone()[0]
     
     if count == 0:
-        # Add some sample data
+        # Add some sample data for different regions in India
         test_data = [
-            (20.5937, 78.9629, 0.85, datetime.now().isoformat()),  # Center of India
-            (20.6037, 78.9729, 0.65, datetime.now().isoformat()),  # Nearby
-            (20.5837, 78.9529, 0.95, datetime.now().isoformat()),  # Another nearby
+            # Chennai area
+            (13.0827, 80.2707, 0.85, datetime.now().isoformat()),  # Chennai
+            (13.1067, 80.2847, 0.65, datetime.now().isoformat()),  # Nearby
+            (13.0647, 80.2567, 0.95, datetime.now().isoformat()),  # Another nearby
+            
+            # Chengalpattu area
+            (12.6819, 79.9888, 0.90, datetime.now().isoformat()),  # Chengalpattu
+            (12.6919, 79.9988, 0.75, datetime.now().isoformat()),  # Nearby
+            (12.6719, 79.9788, 0.85, datetime.now().isoformat()),  # Another nearby
+            
+            # Route between Chennai and Chengalpattu
+            (12.8823, 80.1353, 0.78, datetime.now().isoformat()),  # Midway point
+            (12.9412, 80.1830, 0.88, datetime.now().isoformat()),  # Another on route
+            (12.7631, 80.0576, 0.92, datetime.now().isoformat()),  # Another on route
         ]
         cursor.executemany(
             "INSERT INTO potholes (latitude, longitude, severity, timestamp) VALUES (?, ?, ?, ?)",
@@ -95,10 +106,93 @@ def get_potholes():
     conn.close()
     return jsonify(potholes)
 
+# API endpoint to get route information
+@app.route('/api/route', methods=['GET'])
+def get_route_info():
+    start_lat = float(request.args.get('start_lat'))
+    start_lng = float(request.args.get('start_lng'))
+    end_lat = float(request.args.get('end_lat'))
+    end_lng = float(request.args.get('end_lng'))
+    
+    # Calculate route bounds with small buffer
+    min_lat = min(start_lat, end_lat) - 0.02
+    max_lat = max(start_lat, end_lat) + 0.02
+    min_lng = min(start_lng, end_lng) - 0.02
+    max_lng = max(start_lng, end_lng) + 0.02
+    
+    # Query potholes along route
+    conn = sqlite3.connect('potholes.db')
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT COUNT(*) FROM potholes 
+        WHERE latitude BETWEEN ? AND ? 
+        AND longitude BETWEEN ? AND ?
+    """, (min_lat, max_lat, min_lng, max_lng))
+    pothole_count = cursor.fetchone()[0]
+    conn.close()
+    
+    # Calculate approximate distance
+    distance = calculate_distance(start_lat, start_lng, end_lat, end_lng)
+    
+    return jsonify({
+        "start": {"lat": start_lat, "lng": start_lng},
+        "end": {"lat": end_lat, "lng": end_lng},
+        "pothole_count": pothole_count,
+        "distance_km": round(distance, 2)
+    })
+
+def calculate_distance(lat1, lng1, lat2, lng2):
+    # Haversine formula to calculate distance between coordinates
+    R = 6371  # Earth radius in km
+    d_lat = math.radians(lat2 - lat1)
+    d_lng = math.radians(lng2 - lng1)
+    a = (math.sin(d_lat/2) * math.sin(d_lat/2) + 
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * 
+         math.sin(d_lng/2) * math.sin(d_lng/2))
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
+
 def extract_features(data):
-    # This is a placeholder - implement your actual feature extraction
-    # It should match the feature extraction in your ESP32 code (extract_features function)
-    features = np.zeros(34, dtype=np.float32)  # Assuming 34 features based on model
+    # Implement feature extraction similar to your create_windows() function
+    # This should match the 34 features from your SVM model
+    features = np.zeros(34, dtype=np.float32)
+    
+    # Process accelerometer data
+    if 'accelerometer_data' in data:
+        acc_data = data['accelerometer_data']
+        
+        # Extract features based on your create_windows() function
+        # Time domain features for each axis
+        axes = ['acc_x1', 'acc_y1', 'acc_z1', 'acc_x2', 'acc_y2', 'acc_z2']
+        feat_idx = 0
+        
+        for axis in axes:
+            values = [sample[axis] for sample in acc_data]
+            features[feat_idx] = min(values)  # min
+            features[feat_idx+1] = max(values)  # max
+            features[feat_idx+2] = sum(values) / len(values)  # mean
+            features[feat_idx+3] = np.std(values)  # std
+            feat_idx += 4
+        
+        # Magnitude features
+        mag1_values = [np.sqrt(sample['acc_x1']**2 + sample['acc_y1']**2 + sample['acc_z1']**2) 
+                     for sample in acc_data]
+        mag2_values = [np.sqrt(sample['acc_x2']**2 + sample['acc_y2']**2 + sample['acc_z2']**2) 
+                     for sample in acc_data]
+        
+        features[feat_idx] = max(mag1_values)  # mag1_max
+        features[feat_idx+1] = max(mag2_values)  # mag2_max
+        features[feat_idx+2] = np.std(mag1_values)  # mag1_std
+        features[feat_idx+3] = np.std(mag2_values)  # mag2_std
+        feat_idx += 4
+        
+        # Gyroscope features
+        gyro_axes = ['gyr_x1', 'gyr_y1', 'gyr_z1', 'gyr_x2', 'gyr_y2', 'gyr_z2']
+        for axis in gyro_axes:
+            values = [sample[axis] for sample in acc_data]
+            features[feat_idx] = np.std(values)  # std
+            feat_idx += 1
+    
     return features
 
 def store_pothole(lat, lng, severity):
