@@ -111,6 +111,7 @@ def filter_engine_noise(data, engine_freqs, fs=100):
         
         filtered_data[axis] = signal_data
     
+    # Calculate magnitudes
     filtered_data['acc_mag1'] = np.sqrt(filtered_data['acc_x1']**2 + 
                                      filtered_data['acc_y1']**2 + 
                                      filtered_data['acc_z1']**2)
@@ -118,29 +119,99 @@ def filter_engine_noise(data, engine_freqs, fs=100):
                                      filtered_data['acc_y2']**2 + 
                                      filtered_data['acc_z2']**2)
     
+    # Calculate gyro magnitudes
+    filtered_data['gyr_mag1'] = np.sqrt(filtered_data['gyr_x1']**2 + 
+                                     filtered_data['gyr_y1']**2 + 
+                                     filtered_data['gyr_z1']**2)
+    filtered_data['gyr_mag2'] = np.sqrt(filtered_data['gyr_x2']**2 + 
+                                     filtered_data['gyr_y2']**2 + 
+                                     filtered_data['gyr_z2']**2)
+    
+    # Calculate jerk (derivative of acceleration)
+    for axis in ['acc_x1', 'acc_y1', 'acc_z1', 'acc_x2', 'acc_y2', 'acc_z2']:
+        filtered_data[f'{axis}_jerk'] = filtered_data[axis].diff() / (filtered_data['timestamp'].diff() / 1000)
+    
+    # Calculate sensor differences
+    for axis in ['x', 'y', 'z']:
+        filtered_data[f'acc_{axis}_diff'] = filtered_data[f'acc_{axis}1'] - filtered_data[f'acc_{axis}2']
+        filtered_data[f'gyr_{axis}_diff'] = filtered_data[f'gyr_{axis}1'] - filtered_data[f'gyr_{axis}2']
+    
+    # Calculate z-score for key metrics
+    for col in ['acc_z1', 'acc_z2', 'acc_mag1', 'acc_mag2']:
+        rolling = filtered_data[col].rolling(window=20, center=True)
+        filtered_data[f'{col}_zscore'] = (filtered_data[col] - rolling.mean()) / rolling.std().fillna(1)
+    
     return filtered_data
 
-def auto_label_potholes(data, threshold=1.8, window_size=5):
+def auto_label_potholes(data, threshold=1.8, window_size=8):
     data['auto_pothole'] = 0
     
-    # Modified pothole detection condition with lower magnitude threshold
-    z_threshold = -threshold
-    mag_threshold = threshold + 4  # Reduced from +6 to +4 for better sensitivity
+    # Different thresholds for different sensors
+    z1_threshold = -threshold * 0.9  # Slightly more sensitive for front sensor
+    z2_threshold = -threshold * 1.1  # Slightly less sensitive for rear sensor
+    mag_threshold = threshold + 3.5  # Reduced from +4 for better sensitivity
+    jerk_threshold = 15.0  # Threshold for jerk detection
+    zscore_threshold = 2.5  # Z-score threshold
+    
+    # Calculate ratio between vertical and horizontal accelerations
+    data['z_xy_ratio1'] = np.abs(data['acc_z1']) / (np.abs(data['acc_x1']) + np.abs(data['acc_y1']) + 0.1)
+    data['z_xy_ratio2'] = np.abs(data['acc_z2']) / (np.abs(data['acc_x2']) + np.abs(data['acc_y2']) + 0.1)
+    ratio_threshold = 0.8  # Threshold for z/xy ratio
     
     for i in range(len(data) - window_size + 1):
         window = data.iloc[i:i+window_size]
         
+        # Z-axis condition with different thresholds for each sensor
         z_condition = (
-            (window['acc_z1'].min() < z_threshold) or 
-            (window['acc_z2'].min() < z_threshold)
+            (window['acc_z1'].min() < z1_threshold) or 
+            (window['acc_z2'].min() < z2_threshold)
         )
         
+        # Magnitude condition
         mag_condition = (
             (window['acc_mag1'].max() > mag_threshold) or 
             (window['acc_mag2'].max() > mag_threshold)
         )
         
-        if z_condition and mag_condition:
+        # Jerk condition (if jerk columns exist)
+        jerk_condition = False
+        if 'acc_z1_jerk' in window.columns:
+            jerk_condition = (
+                (window['acc_z1_jerk'].abs().max() > jerk_threshold) or
+                (window['acc_z2_jerk'].abs().max() > jerk_threshold)
+            )
+        
+        # Z-score condition (if zscore columns exist)
+        zscore_condition = False
+        if 'acc_z1_zscore' in window.columns:
+            zscore_condition = (
+                (window['acc_z1_zscore'].abs().max() > zscore_threshold) or
+                (window['acc_z2_zscore'].abs().max() > zscore_threshold)
+            )
+        
+        # Ratio condition
+        ratio_condition = (
+            (window['z_xy_ratio1'].max() > ratio_threshold) or
+            (window['z_xy_ratio2'].max() > ratio_threshold)
+        )
+        
+        # Duration condition - require at least 3 consecutive samples above threshold
+        duration_condition = (
+            (window['acc_z1'] < z1_threshold).sum() >= 3 or
+            (window['acc_z2'] < z2_threshold).sum() >= 3
+        )
+        
+        # Combined condition - require at least 3 of the 5 conditions to be true
+        conditions_met = sum([
+            z_condition, 
+            mag_condition, 
+            jerk_condition, 
+            zscore_condition,
+            ratio_condition,
+            duration_condition
+        ])
+        
+        if conditions_met >= 3:
             data.loc[data.index[i:i+window_size], 'auto_pothole'] = 1
     
     # Group consecutive pothole detections
@@ -195,10 +266,10 @@ def create_visualizations(data, filtered_data, labeled_data, pothole_groups, pha
     
     for start, end in pothole_groups:
         if start < sample_window:
-            end_idx = min(end, sample_window)
+            end_idx = min(end, sample_window-1)  # Ensure end_idx is within bounds
             plt.axvspan(labeled_data['timestamp'][start]/1000,
-                       labeled_data['timestamp'][end_idx]/1000,
-                       alpha=0.3, color='red')
+                    labeled_data['timestamp'][end_idx]/1000,
+                    alpha=0.3, color='red')
     
     plt.title(f'Detected Potholes - {phase.upper()}')
     plt.xlabel('Time (s)')
@@ -251,10 +322,10 @@ def process_data():
         thresholds = {
             'default': 1.8,
             'simulated_pothole': 1.3,
-            'pothole_road': 2.2,
-            'rough_road': 2.5,
+            'pothole_road': 2.0,  # Reduced from 2.2 for better sensitivity
+            'rough_road': 2.8,    # Increased from 2.5 to reduce false positives
             'smooth_road': 1.5,
-            'idle_engine': 3.0  # High threshold to avoid false positives during idle
+            'idle_engine': 3.0    # High threshold to avoid false positives during idle
         }
         
         threshold = thresholds.get(phase, thresholds['default'])
