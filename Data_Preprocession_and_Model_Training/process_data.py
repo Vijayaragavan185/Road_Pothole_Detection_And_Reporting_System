@@ -12,8 +12,8 @@ def parse_json_like(data_file):
     with open(data_file, 'r') as f:
         first_line = f.readline().strip()
     
-    # Check if it's our JSON format
-    if first_line.startswith('{"ax":'):
+    # Check if it's our JSON format (support both single and dual sensor formats)
+    if first_line.startswith('{"ax1":') or first_line.startswith('{"ax":'):
         print(f"Detected JSON-like format in {data_file}, converting...")
         
         parsed_lines = []
@@ -21,26 +21,55 @@ def parse_json_like(data_file):
             for line in f:
                 try:
                     # Convert to proper JSON
-                    json_str = re.sub(r'([a-z]+):', r'"\1":', line.strip())
+                    json_str = re.sub(r'([a-z0-9]+):', r'"\1":', line.strip())
                     if '}' not in json_str:
                         json_str += '}'
                     data = json.loads(json_str)
                     
-                    # Extract values
+                    # Extract values - support both formats
                     timestamp = data.get('t', 0)
-                    acc_x1 = data.get('ax', 0)
-                    acc_y1 = data.get('ay', 0)
-                    acc_z1 = data.get('az', 0)
-                    gyr_x1 = data.get('gx', 0)
-                    gyr_y1 = data.get('gy', 0)
-                    gyr_z1 = data.get('gz', 0)
+                    
+                    # Try dual sensor format first
+                    if 'ax1' in data:
+                        # Front sensor
+                        acc_x1 = data.get('ax1', 0)
+                        acc_y1 = data.get('ay1', 0)
+                        acc_z1 = data.get('az1', 0)
+                        gyr_x1 = data.get('gx1', 0)
+                        gyr_y1 = data.get('gy1', 0)
+                        gyr_z1 = data.get('gz1', 0)
+                        
+                        # Rear sensor
+                        acc_x2 = data.get('ax2', 0)
+                        acc_y2 = data.get('ay2', 0)
+                        acc_z2 = data.get('az2', 0)
+                        gyr_x2 = data.get('gx2', 0)
+                        gyr_y2 = data.get('gy2', 0)
+                        gyr_z2 = data.get('gz2', 0)
+                    else:
+                        # Single sensor format (duplicate as both sensors)
+                        acc_x1 = data.get('ax', 0)
+                        acc_y1 = data.get('ay', 0)
+                        acc_z1 = data.get('az', 0)
+                        gyr_x1 = data.get('gx', 0)
+                        gyr_y1 = data.get('gy', 0)
+                        gyr_z1 = data.get('gz', 0)
+                        
+                        # Duplicate as sensor 2
+                        acc_x2 = acc_x1
+                        acc_y2 = acc_y1
+                        acc_z2 = acc_z1
+                        gyr_x2 = gyr_x1
+                        gyr_y2 = gyr_y1
+                        gyr_z2 = gyr_z1
                     
                     parsed_lines.append([timestamp, acc_x1, acc_y1, acc_z1, 
-                                         acc_x1, acc_y1, acc_z1,  # Duplicate as sensor 2
-                                         gyr_x1, gyr_y1, gyr_z1,
-                                         gyr_x1, gyr_y1, gyr_z1,  # Duplicate as sensor 2
-                                         0])  # is_pothole
-                except:
+                                       acc_x2, acc_y2, acc_z2,
+                                       gyr_x1, gyr_y1, gyr_z1,
+                                       gyr_x2, gyr_y2, gyr_z2,
+                                       0])  # is_pothole
+                except Exception as e:
+                    print(f"Error parsing line: {e}")
                     continue
                     
         # Create DataFrame
