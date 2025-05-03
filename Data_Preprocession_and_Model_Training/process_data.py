@@ -175,6 +175,7 @@ def filter_engine_noise(data, engine_freqs, fs=100):
     return filtered_data
 
 # Auto-label potential potholes
+
 def auto_label_potholes(data, threshold=2.0):
     """Auto-label potential potholes using acceleration thresholds"""
     # Add auto_pothole column
@@ -205,7 +206,7 @@ def auto_label_potholes(data, threshold=2.0):
     
     # Add last group if ending in pothole
     if in_pothole:
-        pothole_groups.append((start_idx, len(pothole_condition)))
+        pothole_groups.append((start_idx, len(pothole_condition) - 1))
     
     print(f"Automatically detected {len(pothole_groups)} potential potholes")
     return data, pothole_groups
@@ -253,9 +254,11 @@ def create_visualizations(data, filtered_data, labeled_data, pothole_groups, pha
     for start, end in pothole_groups:
         if start < sample_window:
             end_idx = min(end, sample_window)
+            # Ensure end_idx does not exceed the DataFrame's maximum index
+            end_idx = min(end_idx, len(labeled_data) - 1)
             plt.axvspan(labeled_data['timestamp'][start]/1000,
-                       labeled_data['timestamp'][end_idx]/1000,
-                       alpha=0.3, color='red')
+                    labeled_data['timestamp'][end_idx]/1000,
+                    alpha=0.3, color='red')
     
     plt.title(f'Detected Potholes - {phase.upper()}')
     plt.xlabel('Time (s)')
